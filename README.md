@@ -150,22 +150,6 @@ Zip or upload (per ScoreMe instructions):
 
 **Do not submit:** `sch/` (local venv), `.pytest_cache/`, large `output/result_*.json` unless asked.
 
----
-
-## Task 8 — Viva voce (not in zip)
-
-A **20-minute live oral exam** with two ScoreMe engineers (in person or video call). **Not** a recorded video submission.
-
-You may be asked to:
-
-- Walk through pseudocode from memory (whiteboard)
-- Trace the algorithm on a **new 6-node** instance
-- Explain any line of `src/scheduler.py`
-- Answer perturbations (5th resource dimension, different slot capacities)
-
-**Prepare from:** `REPORT.md` Task 3, `src/scheduler.py`, `instances/toy.json`
-
-The assignment states that inability to explain your own work in the viva can void the entire submission — study the code and report before the interview.
 
 ---
 
