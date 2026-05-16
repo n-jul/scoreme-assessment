@@ -1,7 +1,13 @@
+"""
+SLA-Weighted Conflict-First Greedy with Multi-Restart and Backtrack (SCFG-MR).
+
+Polynomial-time heuristic for MSME credit pipeline scheduling.
+"""
 
 from __future__ import annotations
 
 import itertools
+import random
 import time
 from typing import Callable
 
@@ -18,7 +24,7 @@ def _slot_feasible(
     usage: list[list[float]],
     adj: list[set[int]],
 ) -> bool:
-    """Check F1/F2/F3 for placing task into slot (1-indexed)."""
+    """True if placing task in slot respects F1 (conflict), F2 (capacity), F3 (SLA)."""
     lo, hi = instance.windows[task]
     if slot < lo + 1 or slot > hi + 1:
         return False
@@ -28,9 +34,8 @@ def _slot_feasible(
         if neighbor in assignment and assignment[neighbor] == slot:
             return False
 
-    d_dims = len(instance.resources[task])
-    for d in range(d_dims):
-        if usage[s_idx][d] + instance.resources[task][d] > instance.capacities[s_idx][d] + 1e-9:
+    for d, req in enumerate(instance.resources[task]):
+        if usage[s_idx][d] + req > instance.capacities[s_idx][d] + 1e-9:
             return False
     return True
 
@@ -60,102 +65,8 @@ def _remove_task(
         usage[s_idx][d] -= req
 
 
-def _task_order(instance: Instance, adj: list[set[int]]) -> list[int]:
-    """
-    DSATUR-inspired ordering: high weight, high degree, tight SLA window first.
-    Tighter windows and more conflicts are scheduled before easy tasks.
-    """
-    def key(i: int) -> tuple:
-        lo, hi = instance.windows[i]
-        width = hi - lo
-        return (
-            -instance.weights[i],
-            -len(adj[i]),
-            width,
-            -sum(len(adj[j]) for j in adj[i]),
-        )
-
-    return sorted(range(instance.n), key=key)
-
-
-def scfg_schedule(instance: Instance) -> tuple[dict[int, int] | None, str]:
-    """
-    Run SCFG: greedy placement + iterative local improvement.
-
-    Returns (assignment or None, violation_reason).
-    """
-    n = instance.n
-    K = instance.K
-    adj = instance.conflict_neighbors()
-    d_dims = len(instance.resources[0]) if n else 4
-    usage = [[0.0] * d_dims for _ in range(K)]
-    assignment: dict[int, int] = {}
-
-    for task in _task_order(instance, adj):
-        placed = False
-        # Prefer earlier slots to reduce P_base, but scan all feasible in window
-        lo, hi = instance.windows[task]
-        candidates = range(lo + 1, hi + 2)
-        for slot in sorted(candidates, key=lambda s: (s, total_penalty(instance, {**assignment, task: s}))):
-            if _slot_feasible(instance, task, slot, assignment, usage, adj):
-                _apply_task(instance, task, slot, assignment, usage)
-                placed = True
-                break
-        if not placed:
-            return None, (
-                f"No feasible slot for task {instance.tasks[task]} "
-                f"(window [{lo + 1},{hi + 1}], conflicts/ capacity block all slots)"
-            )
-
-    assignment = _local_search(instance, assignment)
-    feasible, reason = check_feasibility(instance, assignment)
-    if not feasible:
-        return None, reason
-    return assignment, ""
-
-
-def _local_search(instance: Instance, assignment: dict[int, int], max_rounds: int = 50) -> dict[int, int]:
-    """
-    Hill-climb: try moving one task to another feasible slot if penalty decreases.
-  Stops when no improving move exists or max_rounds exhausted.
-    """
-    adj = instance.conflict_neighbors()
-    d_dims = len(instance.resources[0])
-    current = dict(assignment)
-    best_penalty = total_penalty(instance, current)
-
-    for _ in range(max_rounds):
-        improved = False
-        for task in range(instance.n):
-            old_slot = current[task]
-            _remove_task(instance, task, current, _build_usage(instance, current))
-            usage = _build_usage(instance, current)
-            lo, hi = instance.windows[task]
-            for slot in range(lo + 1, hi + 2):
-                if slot == old_slot:
-                    continue
-                if not _slot_feasible(instance, task, slot, current, usage, adj):
-                    continue
-                trial = dict(current)
-                _apply_task(instance, task, slot, trial, _build_usage(instance, trial))
-                p = total_penalty(instance, trial)
-                if p < best_penalty - 1e-9:
-                    current = trial
-                    best_penalty = p
-                    improved = True
-                    break
-            if task in current:
-                continue
-            # restore if not moved
-            usage = _build_usage(instance, current)
-            _apply_task(instance, task, old_slot, current, usage)
-        if not improved:
-            break
-    return assignment if not improved else current
-
-
 def _build_usage(instance: Instance, assignment: dict[int, int]) -> list[list[float]]:
-    d_dims = len(instance.resources[0])
+    d_dims = len(instance.resources[0]) if instance.n else 4
     usage = [[0.0] * d_dims for _ in range(instance.K)]
     for i, slot in assignment.items():
         s_idx = slot - 1
@@ -164,15 +75,197 @@ def _build_usage(instance: Instance, assignment: dict[int, int]) -> list[list[fl
     return usage
 
 
+def _order_default(instance: Instance, adj: list[set[int]]) -> list[int]:
+    """High lender weight, high conflict degree, tight SLA window first."""
+
+    def key(i: int) -> tuple:
+        lo, hi = instance.windows[i]
+        return (-instance.weights[i], -len(adj[i]), hi - lo, -sum(len(adj[j]) for j in adj[i]))
+
+    return sorted(range(instance.n), key=key)
+
+
+def _order_degree_first(instance: Instance, adj: list[set[int]]) -> list[int]:
+    return sorted(range(instance.n), key=lambda i: (-len(adj[i]), instance.windows[i][1] - instance.windows[i][0]))
+
+
+def _order_window_tight(instance: Instance, adj: list[set[int]]) -> list[int]:
+    return sorted(range(instance.n), key=lambda i: (instance.windows[i][1] - instance.windows[i][0], -instance.weights[i]))
+
+
+def _ordering_variants(instance: Instance, adj: list[set[int]]) -> list[list[int]]:
+    """Multiple task orderings for multi-restart greedy (reduces false infeasibility)."""
+    base = _order_default(instance, adj)
+    variants = [
+        base,
+        list(reversed(base)),
+        _order_degree_first(instance, adj),
+        _order_window_tight(instance, adj),
+        sorted(range(instance.n), key=lambda i: instance.weights[i]),
+    ]
+    rng = random.Random(instance.n * 997 + instance.K)
+    shuffled = list(range(instance.n))
+    rng.shuffle(shuffled)
+    variants.append(shuffled)
+    return variants
+
+
+def _greedy_build(instance: Instance, order: list[int]) -> tuple[dict[int, int] | None, str]:
+    """Place tasks in given order; prefer lowest slot index among feasible candidates."""
+    adj = instance.conflict_neighbors()
+    d_dims = len(instance.resources[0]) if instance.n else 4
+    usage = [[0.0] * d_dims for _ in range(instance.K)]
+    assignment: dict[int, int] = {}
+
+    for task in order:
+        lo, hi = instance.windows[task]
+        placed = False
+        for slot in range(lo + 1, hi + 2):
+            if _slot_feasible(instance, task, slot, assignment, usage, adj):
+                _apply_task(instance, task, slot, assignment, usage)
+                placed = True
+                break
+        if not placed:
+            return None, (
+                f"No feasible slot for task {instance.tasks[task]} "
+                f"(window [{lo + 1},{hi + 1}])"
+            )
+    return assignment, ""
+
+
+def _backtrack_build(
+    instance: Instance,
+    order: list[int],
+    idx: int,
+    assignment: dict[int, int],
+    usage: list[list[float]],
+    adj: list[set[int]],
+    best: list,
+) -> bool:
+    """Depth-first backtrack on task order; keeps best feasible assignment by penalty."""
+    if idx == len(order):
+        feasible, _ = check_feasibility(instance, assignment)
+        if not feasible:
+            return False
+        p = total_penalty(instance, assignment)
+        if p < best[0]:
+            best[0] = p
+            best[1] = dict(assignment)
+        return True
+
+    task = order[idx]
+    lo, hi = instance.windows[task]
+    found = False
+    for slot in range(lo + 1, hi + 2):
+        if not _slot_feasible(instance, task, slot, assignment, usage, adj):
+            continue
+        _apply_task(instance, task, slot, assignment, usage)
+        if _backtrack_build(instance, order, idx + 1, assignment, usage, adj, best):
+            found = True
+        _remove_task(instance, task, assignment, usage)
+    return found
+
+
+def _local_search(instance: Instance, assignment: dict[int, int], max_rounds: int = 50) -> dict[int, int]:
+    """Hill-climb: relocate tasks to lower-penalty feasible slots."""
+    adj = instance.conflict_neighbors()
+    current = dict(assignment)
+    best_penalty = total_penalty(instance, current)
+
+    for _ in range(max_rounds):
+        improved = False
+        for task in range(instance.n):
+            old_slot = current[task]
+            usage = _build_usage(instance, current)
+            _remove_task(instance, task, current, usage)
+            lo, hi = instance.windows[task]
+            for slot in range(lo + 1, hi + 2):
+                if slot == old_slot:
+                    continue
+                usage = _build_usage(instance, current)
+                if not _slot_feasible(instance, task, slot, current, usage, adj):
+                    continue
+                trial = dict(current)
+                trial_usage = _build_usage(instance, trial)
+                _apply_task(instance, task, slot, trial, trial_usage)
+                p = total_penalty(instance, trial)
+                if p < best_penalty - 1e-9:
+                    current = trial
+                    best_penalty = p
+                    improved = True
+                    break
+            if task not in current:
+                usage = _build_usage(instance, current)
+                _apply_task(instance, task, old_slot, current, usage)
+        if not improved:
+            break
+    return current
+
+
+def scfg_schedule(instance: Instance) -> tuple[dict[int, int] | None, str]:
+    """
+    SCFG-MR: multi-restart greedy + backtrack (small n) + local search.
+
+    Tries several task orderings; for n <= 18 also runs backtracking to avoid
+    false infeasibility from greedy ordering. Returns best feasible assignment.
+    """
+    adj = instance.conflict_neighbors()
+    best_assign: dict[int, int] | None = None
+    best_penalty = float("inf")
+    last_reason = "No feasible assignment found"
+
+    for order in _ordering_variants(instance, adj):
+        assignment, reason = _greedy_build(instance, order)
+        if assignment is None:
+            last_reason = reason
+            continue
+        assignment = _local_search(instance, assignment)
+        p = total_penalty(instance, assignment)
+        ok, _ = check_feasibility(instance, assignment)
+        if ok and p < best_penalty:
+            best_penalty = p
+            best_assign = assignment
+
+    if best_assign is not None:
+        return best_assign, ""
+
+    if instance.n <= 18:
+        order = _order_default(instance, adj)
+        d_dims = len(instance.resources[0])
+        usage = [[0.0] * d_dims for _ in range(instance.K)]
+        best = [float("inf"), None]
+        _backtrack_build(instance, order, 0, {}, usage, adj, best)
+        if best[1] is not None:
+            improved = _local_search(instance, best[1])
+            return improved, ""
+
+    # Large n: extra random orderings (polynomial restarts, no full backtrack)
+    for seed in range(24):
+        rng = random.Random(instance.n * 1009 + instance.K * 17 + seed)
+        order = list(range(instance.n))
+        rng.shuffle(order)
+        assignment, reason = _greedy_build(instance, order)
+        if assignment is None:
+            last_reason = reason
+            continue
+        assignment = _local_search(instance, assignment)
+        p = total_penalty(instance, assignment)
+        ok, _ = check_feasibility(instance, assignment)
+        if ok and p < best_penalty:
+            best_penalty = p
+            best_assign = assignment
+
+    if best_assign is not None:
+        return best_assign, ""
+
+    return None, last_reason
+
+
 def brute_force_optimal(instance: Instance, max_n: int = 12) -> tuple[dict[int, int] | None, float]:
-    """
-    Enumerate all assignments (K^n) for small n; return optimal feasible assignment.
-    Used only for benchmark comparison on small instances.
-    """
+    """Enumerate K^n assignments; return minimum-penalty feasible solution."""
     if instance.n > max_n:
         return None, float("inf")
 
-    adj = instance.conflict_neighbors()
     best: dict[int, int] | None = None
     best_p = float("inf")
 
@@ -190,7 +283,7 @@ def brute_force_optimal(instance: Instance, max_n: int = 12) -> tuple[dict[int, 
 
 
 def solve(instance: Instance, use_brute_compare: bool = False) -> ScheduleResult:
-    """Main entry: run SCFG and optionally compute brute-force optimal."""
+    """Run SCFG-MR and package results for JSON output."""
     start = time.perf_counter()
     assignment, violation = scfg_schedule(instance)
     elapsed_ms = int((time.perf_counter() - start) * 1000)

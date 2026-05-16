@@ -4,10 +4,11 @@
     "K": 3,
     "density": 0.3,
     "seed": 1,
-    "penalty": 72.59050047170942,
+    "penalty": 72.5905004717094,
     "runtime_ms": 0,
     "feasible": true,
-    "approximation_ratio": 1.0000000000000002,
+    "violation_reason": "",
+    "approximation_ratio": 1.0,
     "optimal_penalty": 72.5905004717094
   },
   {
@@ -15,10 +16,12 @@
     "K": 4,
     "density": 0.4,
     "seed": 2,
-    "penalty": Infinity,
+    "penalty": 98.44260965017338,
     "runtime_ms": 0,
-    "feasible": false,
-    "violation_reason": "No feasible slot for task T1 (window [1,2], conflicts/ capacity block all slots)"
+    "feasible": true,
+    "violation_reason": "",
+    "approximation_ratio": 1.2198392278283818,
+    "optimal_penalty": 80.70129850261152
   },
   {
     "n": 12,
@@ -28,6 +31,7 @@
     "penalty": 138.1822787403877,
     "runtime_ms": 1,
     "feasible": true,
+    "violation_reason": "",
     "approximation_ratio": 1.0,
     "optimal_penalty": 138.1822787403877
   },
@@ -36,59 +40,59 @@
     "K": 8,
     "density": 0.25,
     "seed": 10,
-    "penalty": Infinity,
+    "penalty": null,
     "runtime_ms": 0,
     "feasible": false,
-    "violation_reason": "No feasible slot for task T3 (window [4,5], conflicts/ capacity block all slots)"
+    "violation_reason": "No feasible slot for task T6 (window [5,6])"
   },
   {
     "n": 100,
     "K": 10,
     "density": 0.3,
     "seed": 11,
-    "penalty": Infinity,
-    "runtime_ms": 1,
+    "penalty": null,
+    "runtime_ms": 2,
     "feasible": false,
-    "violation_reason": "No feasible slot for task T7 (window [7,9], conflicts/ capacity block all slots)"
+    "violation_reason": "No feasible slot for task T0 (window [1,5])"
   },
   {
     "n": 150,
     "K": 12,
     "density": 0.35,
     "seed": 12,
-    "penalty": Infinity,
-    "runtime_ms": 2,
+    "penalty": null,
+    "runtime_ms": 4,
     "feasible": false,
-    "violation_reason": "No feasible slot for task T75 (window [11,12], conflicts/ capacity block all slots)"
+    "violation_reason": "No feasible slot for task T110 (window [11,12])"
   },
   {
     "n": 200,
     "K": 15,
     "density": 0.4,
     "seed": 20,
-    "penalty": Infinity,
-    "runtime_ms": 12,
+    "penalty": null,
+    "runtime_ms": 10,
     "feasible": false,
-    "violation_reason": "No feasible slot for task T198 (window [7,9], conflicts/ capacity block all slots)"
+    "violation_reason": "No feasible slot for task T88 (window [13,14])"
   },
   {
     "n": 200,
     "K": 5,
     "density": 0.6,
     "seed": 21,
-    "penalty": Infinity,
-    "runtime_ms": 3,
+    "penalty": null,
+    "runtime_ms": 13,
     "feasible": false,
-    "violation_reason": "No feasible slot for task T63 (window [2,3], conflicts/ capacity block all slots)"
+    "violation_reason": "No feasible slot for task T41 (window [4,5])"
   },
   {
     "n": 200,
     "K": 20,
     "density": 0.1,
     "seed": 22,
-    "penalty": Infinity,
-    "runtime_ms": 46,
+    "penalty": null,
+    "runtime_ms": 3,
     "feasible": false,
-    "violation_reason": "No feasible slot for task T68 (window [15,16], conflicts/ capacity block all slots)"
+    "violation_reason": "No feasible slot for task T12 (window [1,3])"
   }
 ]
