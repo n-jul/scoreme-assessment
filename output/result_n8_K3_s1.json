@@ -1,0 +1,18 @@
+{
+  "assignment": {
+    "T0": 1,
+    "T1": 3,
+    "T2": 3,
+    "T3": 2,
+    "T4": 2,
+    "T5": 1,
+    "T6": 1,
+    "T7": 3
+  },
+  "penalty": 72.59050047170942,
+  "runtime_ms": 0,
+  "feasible": true,
+  "violation_reason": "",
+  "optimal_penalty": 72.5905004717094,
+  "approximation_ratio": 1.0000000000000002
+}

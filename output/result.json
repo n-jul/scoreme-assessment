@@ -1,0 +1,7 @@
+{
+  "assignment": {},
+  "penalty": Infinity,
+  "runtime_ms": 0,
+  "feasible": false,
+  "violation_reason": "No feasible slot for task T1 (window [1,2], conflicts/ capacity block all slots)"
+}
